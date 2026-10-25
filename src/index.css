@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* 無彩色 + 単色アクセント（深い青 #1A2B6B） */
+    --background: 0 0% 98%;        /* #FAFAFA */
+    --foreground: 0 0% 9%;         /* #171717 */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+    --primary: 228 61% 26%;        /* #1A2B6B */
+    --primary-foreground: 0 0% 100%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 32%;  /* #525252 — 白地で AA */
+    --border: 0 0% 85%;
+    --input: 0 0% 80%;
+    --ring: 228 61% 26%;
+    --radius: 0.75rem;
+  }
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground font-sans antialiased; line-height: 1.75; }
+  h1, h2, h3 { @apply font-serif; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
