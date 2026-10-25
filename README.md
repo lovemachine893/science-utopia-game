@@ -45,12 +45,14 @@ URL パラメータ: `?seed=123` で乱数の種を固定、`?offline=1` で LLM
 | `SUPABASE_URL` | サーバー | Supabase の URL（トークン検証・利用回数の記録）。無ければ `VITE_SUPABASE_URL` を使う | なし |
 | `SUPABASE_SERVICE_ROLE_KEY` | サーバー | Supabase の service role キー（**画面に出さない**） | なし |
 | `SU_LLM_DAILY_LIMIT` | サーバー（任意） | 1 ユーザー 1 日の LLM 呼出し上限 | `60` |
+| `SU_LLM_IP_DAILY_LIMIT` | サーバー（任意） | 1 つの IP の 1 日の LLM 呼出し上限（共有回線を考え大きめ） | `300` |
+| `SU_IP_SALT` | サーバー（任意） | IP ハッシュの塩 | `su-llm` |
 | `VITE_SUPABASE_URL` | 画面（ビルド時） | Supabase の URL（ログイン） | なし |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | 画面（ビルド時） | Supabase の publishable（anon）キー | なし |
 
 名前は koshimizu-futures と同じです。`VITE_SUPABASE_*` が無いビルドではログイン欄が「準備中」になり、**全員ゲストとして動きます**（ビルド・起動は落ちません）。`SUPABASE_*` が無いサーバーでは `/api/su-llm` が 401／503 を返し LLM を呼びません。
 
-Supabase 側では migration を 1 回流してください（`supabase db push`、または SQL Editor に貼る）。Auth の Redirect URLs に本番の URL を入れてください。
+Supabase 側では migration（`supabase/migrations/` の 2 本）を 1 回流してください（`supabase db push`、または SQL Editor に貼る）。Auth の Redirect URLs に本番の URL を入れてください。
 
 `.env.example` に名前だけを書いています。値はコミットしないでください。
 

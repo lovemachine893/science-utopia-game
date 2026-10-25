@@ -13,10 +13,10 @@ const LLM_URL = "https://example.invalid/responses";
 const SB_URL = "https://sb.example.invalid";
 const USER_ID = "00000000-0000-4000-8000-000000000001";
 
-type Opts = { validToken?: string; consume?: number; consumeError?: boolean };
+type Opts = { validToken?: string; consume?: number; consumeError?: boolean; ipConsume?: number };
 
 /** Supabase（auth / rpc）と LLM を URL で振り分けるモック */
-function backend({ validToken = "good-token", consume = 1, consumeError = false }: Opts = {}) {
+function backend({ validToken = "good-token", consume = 1, consumeError = false, ipConsume = 1 }: Opts = {}) {
   const calls: { url: string; init: RequestInit }[] = [];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -27,6 +27,9 @@ function backend({ validToken = "good-token", consume = 1, consumeError = false 
         return new Response(JSON.stringify({ id: USER_ID, aud: "authenticated", email: "u@example.invalid" }), { status: 200 });
       }
       return new Response(JSON.stringify({ code: 401, msg: "invalid JWT" }), { status: 401 });
+    }
+    if (url.startsWith(`${SB_URL}/rest/v1/rpc/su_llm_consume_ip`)) {
+      return new Response(JSON.stringify(ipConsume), { status: 200, headers: { "content-type": "application/json" } });
     }
     if (url.startsWith(`${SB_URL}/rest/v1/rpc/su_llm_consume`)) {
       if (consumeError) return new Response(JSON.stringify({ message: "boom" }), { status: 500 });
@@ -45,7 +48,7 @@ function backend({ validToken = "good-token", consume = 1, consumeError = false 
   });
   vi.stubGlobal("fetch", fetchMock);
   const llmCalls = () => calls.filter((c) => c.url === LLM_URL);
-  const rpc = (name: string) => calls.filter((c) => c.url.includes(`/rpc/${name}`));
+  const rpc = (name: string) => calls.filter((c) => c.url.endsWith(`/rpc/${name}`));
   return { fetchMock, calls, llmCalls, rpc };
 }
 
@@ -98,6 +101,24 @@ describe("api/su-llm", () => {
     expect(b.llmCalls()).toHaveLength(0);
     const sent = JSON.parse(String(b.rpc("su_llm_consume")[0].init.body));
     expect(sent).toEqual({ p_user_id: USER_ID, p_day: jstDay(), p_limit: 60 });
+  });
+
+  it("IP の日次上限を超えると 429（scope: ip）で、トークン検証も LLM も呼ばない", async () => {
+    const b = backend({ ipConsume: -1 });
+    const r = new Request("http://x/api/su-llm", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer good-token", "x-forwarded-for": "203.0.113.9, 10.0.0.1" },
+      body: JSON.stringify({ task: "map_free", input: {} }),
+    });
+    const res = await POST(r);
+    expect(res.status).toBe(429);
+    expect((await res.json()).scope).toBe("ip");
+    expect(b.llmCalls()).toHaveLength(0);
+    expect(b.calls.some((c) => c.url.includes("/auth/v1/user"))).toBe(false);
+    const sent = JSON.parse(String(b.rpc("su_llm_consume_ip")[0].init.body));
+    expect(sent.p_limit).toBe(300);
+    expect(sent.p_ip_key).toMatch(/^[0-9a-f]{32}$/);
+    expect(JSON.stringify(sent)).not.toContain("203.0.113.9");
   });
 
   it("SU_LLM_DAILY_LIMIT で上限を変えられる", async () => {

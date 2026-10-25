@@ -2,9 +2,12 @@
 //   1) Bearer トークンを auth.getUser(token) で検証し、
 //   2) public.su_llm_consume でユーザーごとの当日の呼出し回数を 1 つ予約する。
 // 鍵はすべて環境変数から読む（値はコードに書かない）。
+import { createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 export const DEFAULT_DAILY_LIMIT = 60;
+/** 1 つの IP の 1 日の上限（共有回線を考えてユーザー上限より大きい）。 */
+export const DEFAULT_IP_DAILY_LIMIT = 300;
 
 export type Gate =
   | { ok: true; userId: string; day: string; calls: number; limit: number; remaining: number; db: SupabaseClient }
@@ -24,6 +27,23 @@ export function nextJstMidnight(now = new Date()): string {
 export function dailyLimit(): number {
   const n = Number(process.env.SU_LLM_DAILY_LIMIT);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_DAILY_LIMIT;
+}
+
+export function ipDailyLimit(): number {
+  const n = Number(process.env.SU_LLM_IP_DAILY_LIMIT);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : DEFAULT_IP_DAILY_LIMIT;
+}
+
+/** Vercel は x-forwarded-for の先頭にクライアント IP を入れる。 */
+export function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return xff || req.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+/** DB には IP そのものを置かず、塩付きハッシュだけを置く。 */
+export function ipKey(ip: string): string {
+  const salt = process.env.SU_IP_SALT || "su-llm";
+  return createHash("sha256").update(`${salt}:${ip}`).digest("hex").slice(0, 32);
 }
 
 export function bearerToken(req: Request): string | null {
@@ -54,6 +74,22 @@ export async function gate(req: Request, now = new Date()): Promise<Gate> {
     return { ok: false, status: 503, body: { error: "Auth is not configured" } };
   }
 
+  // IP 単位の日次上限。トークン検証より先に数えるので、偽トークンの連打も IP の枠を消費する。
+  const day = jstDay(now);
+  const ipLimit = ipDailyLimit();
+  const { data: ipCalls, error: ipErr } = await db.rpc("su_llm_consume_ip", {
+    p_ip_key: ipKey(clientIp(req)),
+    p_day: day,
+    p_limit: ipLimit,
+  });
+  if (ipErr || typeof ipCalls !== "number") {
+    console.error("su-llm: ip usage check failed", ipErr?.message ?? "bad response");
+    return { ok: false, status: 503, body: { error: "Usage check failed" } };
+  }
+  if (ipCalls < 0) {
+    return { ok: false, status: 429, body: { error: "Daily limit reached for this network", scope: "ip", reset_at: nextJstMidnight(now) } };
+  }
+
   let userId: string | undefined;
   try {
     const { data, error } = await db.auth.getUser(token);
@@ -64,7 +100,6 @@ export async function gate(req: Request, now = new Date()): Promise<Gate> {
   if (!userId) return { ok: false, status: 401, body: { error: "Invalid or expired session" } };
 
   const limit = dailyLimit();
-  const day = jstDay(now);
   const { data: calls, error } = await db.rpc("su_llm_consume", { p_user_id: userId, p_day: day, p_limit: limit });
   if (error || typeof calls !== "number") {
     console.error("su-llm: usage check failed", error?.message ?? "bad response");
