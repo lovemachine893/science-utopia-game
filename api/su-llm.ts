@@ -13,7 +13,6 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_ENDPOINT = "https://oai-researcher-kotaro-sakamoto.services.ai.azure.com/openai/v1/responses";
 const DEFAULT_MODEL = "gpt-6-luna";
 
 export type Task = "personas" | "map_free" | "year_news" | "ending";
@@ -69,7 +68,8 @@ export function parseJsonLoose(content: string): unknown {
 async function complete(prompt: string, maxTokens: number) {
   const key = process.env.AZURE_LUNA_API_KEY;
   if (!key) throw new Error("AZURE_LUNA_API_KEY is not set");
-  const url = process.env.AZURE_LUNA_ENDPOINT || DEFAULT_ENDPOINT;
+  const url = process.env.AZURE_LUNA_ENDPOINT;
+  if (!url) throw new Error("AZURE_LUNA_ENDPOINT is not set");
   const model = process.env.AZURE_LUNA_MODEL || DEFAULT_MODEL;
   const res = await fetch(url, {
     method: "POST",

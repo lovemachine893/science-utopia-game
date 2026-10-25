@@ -147,6 +147,14 @@ describe("api/su-llm", () => {
     expect(res.status).toBe(500);
   });
 
+  it("エンドポイントが無ければ 500（URL を既定値で補わない）", async () => {
+    vi.stubEnv("AZURE_LUNA_ENDPOINT", "");
+    const b = backend();
+    const res = await POST(req({ task: "year_news", input: {} }, "good-token"));
+    expect(res.status).toBe(500);
+    expect(b.llmCalls()).toHaveLength(0);
+  });
+
   it("未知の task は 400（回数を消費しない）", async () => {
     const b = backend();
     const res = await POST(req({ task: "free_prompt", input: "x" }, "good-token"));

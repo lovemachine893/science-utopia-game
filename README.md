@@ -40,7 +40,7 @@ URL パラメータ: `?seed=123` で乱数の種を固定、`?offline=1` で LLM
 | 名前 | 置き場所 | 用途 | 既定 |
 |---|---|---|---|
 | `AZURE_LUNA_API_KEY` | サーバー | Azure OpenAI の API キー | なし |
-| `AZURE_LUNA_ENDPOINT` | サーバー | Responses API の URL | `api/su-llm.ts` を参照 |
+| `AZURE_LUNA_ENDPOINT` | サーバー | Responses API の URL（`…/openai/v1/responses`） | なし（必須） |
 | `AZURE_LUNA_MODEL` | サーバー | モデル（デプロイ）名 | `gpt-6-luna` |
 | `SUPABASE_URL` | サーバー | Supabase の URL（トークン検証・利用回数の記録）。無ければ `VITE_SUPABASE_URL` を使う | なし |
 | `SUPABASE_SERVICE_ROLE_KEY` | サーバー | Supabase の service role キー（**画面に出さない**） | なし |
