@@ -25,18 +25,32 @@
 
 URL パラメータ: `?seed=123` で乱数の種を固定、`?offline=1` で LLM を呼ばずに同梱テンプレートで遊べます。
 
-## LLM
+## LLM とログイン
 
 文章（研究者のペルソナ、自由記述の置き換え、年次ニュース、講評）は Vercel Function `api/su-llm.ts` が Azure OpenAI の Responses API で生成します。**数値には関与しません。**
-LLM に接続できないときは、同梱の固定 24 人とテンプレート文に切り替わり、ゲームは止まりません（自由記述は b 扱い）。
+
+- **ゲスト（未ログイン）**: LLM は使いません。同梱の固定 24 人とテンプレート文で最後まで遊べます（自由記述は b 扱い）。JSON ダウンロードもできます。
+- **ログイン**: Supabase Auth のメール magic link でログインします（メールに 6 桁のコードがあればそれでも可）。ログイン中は画面が Supabase のアクセストークンを `Authorization: Bearer` で `/api/su-llm` に付けます。
+- `/api/su-llm` は Bearer が無い・検証できないと **401**（LLM を呼ばない）。トークンは service role で `auth.getUser(token)` 相当（`/auth/v1/user`）で検証します。
+- 乱用防止のため、ユーザーごとに **1 日 60 回**（日本時間 0 時に戻る。1 ゲームは約 32 回）。超えると **429** と `remaining: 0`・`reset_at` を返し、画面はテンプレートに切り替えます。回数とトークン数は Supabase のテーブル `su_llm_usage` に記録します（`supabase/migrations/20261025190000_su_llm_usage.sql`）。
+- LLM の失敗・タイムアウト・401・429 のときも、同梱テンプレートに切り替わり、ゲームは止まりません。
 
 ### 環境変数
 
-| 名前 | 用途 | 既定 |
-|---|---|---|
-| `AZURE_LUNA_API_KEY` | Azure OpenAI の API キー（必須。無ければテンプレートで動作） | なし |
-| `AZURE_LUNA_ENDPOINT` | Responses API の URL | `api/su-llm.ts` を参照 |
-| `AZURE_LUNA_MODEL` | モデル（デプロイ）名 | `gpt-6-luna` |
+| 名前 | 置き場所 | 用途 | 既定 |
+|---|---|---|---|
+| `AZURE_LUNA_API_KEY` | サーバー | Azure OpenAI の API キー | なし |
+| `AZURE_LUNA_ENDPOINT` | サーバー | Responses API の URL | `api/su-llm.ts` を参照 |
+| `AZURE_LUNA_MODEL` | サーバー | モデル（デプロイ）名 | `gpt-6-luna` |
+| `SUPABASE_URL` | サーバー | Supabase の URL（トークン検証・利用回数の記録）。無ければ `VITE_SUPABASE_URL` を使う | なし |
+| `SUPABASE_SERVICE_ROLE_KEY` | サーバー | Supabase の service role キー（**画面に出さない**） | なし |
+| `SU_LLM_DAILY_LIMIT` | サーバー（任意） | 1 ユーザー 1 日の LLM 呼出し上限 | `60` |
+| `VITE_SUPABASE_URL` | 画面（ビルド時） | Supabase の URL（ログイン） | なし |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | 画面（ビルド時） | Supabase の publishable（anon）キー | なし |
+
+名前は koshimizu-futures と同じです。`VITE_SUPABASE_*` が無いビルドではログイン欄が「準備中」になり、**全員ゲストとして動きます**（ビルド・起動は落ちません）。`SUPABASE_*` が無いサーバーでは `/api/su-llm` が 401／503 を返し LLM を呼びません。
+
+Supabase 側では migration を 1 回流してください（`supabase db push`、または SQL Editor に貼る）。Auth の Redirect URLs に本番の URL を入れてください。
 
 `.env.example` に名前だけを書いています。値はコミットしないでください。
 
@@ -51,7 +65,7 @@ npm test           # vitest（数値モデルの方向性テスト・カード�
 npm run build      # tsc（app / api）+ vite build → dist/
 ```
 
-ローカルで LLM を使うときは、シェルの環境変数に `AZURE_LUNA_API_KEY` などを入れてから `npm run dev` を実行してください。
+ローカルで LLM を使うときは、シェルの環境変数に `AZURE_LUNA_*` と `SUPABASE_*`・`VITE_SUPABASE_*` を入れてから `npm run dev` を実行し、ログインしてください。
 
 ## デプロイ（Vercel）
 
@@ -61,6 +75,9 @@ npm run build      # tsc（app / api）+ vite build → dist/
 
 ```
 api/su-llm.ts                    文章生成（Azure Responses API）
+api/_lib/suAuth.ts               ログイン確認と 1 日の上限（Supabase service role）
+supabase/migrations/             利用回数テーブル su_llm_usage
+src/lib/supabase.ts, auth.ts     ログイン（env が無ければ全員ゲスト）
 src/lib/society/model.ts         数値モデル τ_θ（決定論的）
 src/lib/society/cards.ts         制度カード（6 分野・a/b/c・現状維持）
 src/lib/society/templates.ts     LLM 不通時の文章

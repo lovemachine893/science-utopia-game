@@ -45,7 +45,7 @@ export function YearResult({
               {c.option === "free" && (
                 <span className="block text-xs text-muted-foreground">
                   自由記述「{c.free_text}」→ {c.mapped_option}
-                  {c.mapped_by === "llm" ? `（${c.mapped_reason ?? "LLM が判断"}）` : "（LLM に接続できなかったため b）"}
+                  {c.mapped_by === "llm" ? `（${c.mapped_reason ?? "LLM が判断"}）` : "（LLM を使えなかったため b）"}
                 </span>
               )}
             </li>

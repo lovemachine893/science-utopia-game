@@ -1,11 +1,15 @@
 // Vercel Function（Node）。Science Utopia の文章生成をまとめて受け持つ。
 // LLM は文章だけを書く。数値モデル（src/lib/society/model.ts）には関与しない。
-// 失敗時は 500 を返し、画面側（src/lib/llm.ts）が同梱テンプレートに切り替える。
+// ログイン（Supabase Auth）したユーザーだけが使える。Bearer が無い・検証できないと 401、
+// 1 日の上限（既定 60 回）を超えると 429。どちらも LLM は呼ばない（api/_lib/suAuth.ts）。
+// 失敗時は 4xx/5xx を返し、画面側（src/lib/llm.ts）が同梱テンプレートに切り替える。
+import { gate, recordTokens } from "./_lib/suAuth";
+
 export const config = { maxDuration: 60 };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Headers": "authorization, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -107,10 +111,13 @@ async function handler(req: Request): Promise<Response> {
   }
   const task = body.task as Task;
   if (!TASKS.includes(task)) return json({ error: "Unknown task" }, 400);
+  const g = await gate(req);
+  if (!g.ok) return json(g.body, g.status);
   try {
     const { content, usage } = await complete(buildPrompt(task, body.input), MAX_TOKENS[task]);
+    await recordTokens(g, usage.input_tokens, usage.output_tokens);
     const parsed = parseJsonLoose(content);
-    return json({ result: parsed, usage });
+    return json({ result: parsed, usage, limit: g.limit, remaining: g.remaining });
   } catch (e) {
     console.error("su-llm error:", e instanceof Error ? e.message : e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);

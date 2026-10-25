@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ALL_FIELDS, applyChoice, buildCard, drawFields, FIELD_DEFS, labelOf, OPTION_KEYS, type OptionKey } from "@/lib/society/cards";
-import { callLlm, isStringArray } from "@/lib/llm";
+import { callLlm, isStringArray, llmQuota } from "@/lib/llm";
+import { useAuth } from "@/lib/auth";
+import { authAvailable } from "@/lib/supabase";
+import { AuthModal } from "@/components/auth/AuthModal";
 import { classifyEnding, FIELDS, initSociety, stepYear, THETA_STATUS_QUO } from "@/lib/society/model";
 import { FALLBACK_PERSONAS, sanitizePersonas } from "@/lib/society/personas";
 import { downloadJson, type Choice, type RunRecord, type Source, type Survey, type TurnRecord } from "@/lib/society/record";
@@ -52,10 +55,14 @@ export function ScienceUtopiaGame() {
   const [ending, setEnding] = useState<{ type: EndingType; review: { lines: string[]; source: Source } | null } | null>(null);
   const [busy, setBusy] = useState(false);
   const runId = useRef(0);
+  const { user, signOut } = useAuth();
+  const [loginOpen, setLoginOpen] = useState(false);
+  // ゲスト（未ログイン・Supabase 未設定）と ?offline=1 は LLM を呼ばない
+  const useLlm = !params.offline && user !== null;
 
   const llm = useCallback<typeof callLlm>(
-    (task, input, validate, timeoutMs) => (params.offline ? Promise.resolve(null) : callLlm(task, input, validate, timeoutMs)),
-    [params.offline],
+    (task, input, validate, timeoutMs) => (useLlm ? callLlm(task, input, validate, timeoutMs) : Promise.resolve(null)),
+    [useLlm],
   );
 
   const start = async () => {
@@ -192,7 +199,20 @@ export function ScienceUtopiaGame() {
     document.title = phase === "title" ? "Science Utopia — 良い科学を育てる" : `Science Utopia — Year ${Math.min(5, year)}`;
   }, [phase, year]);
 
-  if (phase === "title") return <TitleScreen onStart={start} />;
+  if (phase === "title")
+    return (
+      <>
+        <TitleScreen
+          onStart={start}
+          user={user}
+          authAvailable={authAvailable}
+          onLogin={() => setLoginOpen(true)}
+          onSignOut={signOut}
+          remaining={llmQuota.remaining}
+        />
+        <AuthModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+      </>
+    );
   if (phase === "personas") return <PersonaScreen personas={personas} source={personasSource} onNext={() => setPhase("turn")} />;
   if (!society || !personas) return null;
   if (phase === "turn") return <TurnScreen key={year} year={year} theta={theta} cards={cards} busy={busy} onSubmit={submitTurn} />;

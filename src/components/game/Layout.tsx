@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { llmQuota } from "@/lib/llm";
 
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   return <main className={`mx-auto w-full ${wide ? "max-w-[880px]" : "max-w-[720px]"} px-6 py-10 md:px-10`}>{children}</main>;
@@ -19,7 +20,12 @@ export function YearBadge({ year }: { year: number }) {
 export function SourceNote({ source }: { source: "llm" | "fallback" }) {
   return (
     <p className="mt-3 text-xs text-muted-foreground">
-      {source === "llm" ? "文章: LLM が生成" : "文章: 同梱テンプレート（LLM に接続できなかったため）"}
+      {source === "llm" ? "文章: LLM が生成" : `文章: 同梱テンプレート（${fallbackReason()}）`}
     </p>
   );
+}
+
+/** テンプレートに切り替えた理由の表示 */
+export function fallbackReason(): string {
+  return llmQuota.limitReached ? "今日の LLM 利用上限に達したため" : "ゲスト、または LLM に接続できなかったため";
 }

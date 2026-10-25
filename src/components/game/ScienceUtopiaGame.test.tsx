@@ -2,9 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ScienceUtopiaGame } from "./ScienceUtopiaGame";
 
-describe("通しプレイ（LLM 不通）", () => {
+// テストでは VITE_SUPABASE_* を設定しない＝本番で Supabase env が未設定のときと同じ状態
+describe("ゲスト通しプレイ（Supabase env 未設定・LLM を呼ばない）", () => {
   it("タイトル → Year1〜5 → エンディング → JSON ダウンロード", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => { throw new Error("offline"); }));
+    const fetchMock = vi.fn(async () => { throw new Error("offline"); });
+    vi.stubGlobal("fetch", fetchMock);
     const blobs: Blob[] = [];
     URL.createObjectURL = vi.fn((b: Blob) => { blobs.push(b); return "blob:x"; }) as typeof URL.createObjectURL;
     URL.revokeObjectURL = vi.fn();
@@ -12,6 +14,9 @@ describe("通しプレイ（LLM 不通）", () => {
 
     render(<ScienceUtopiaGame />);
     expect(screen.getByText("あなたの考える良い科学を育ててください")).toBeInTheDocument();
+    expect(screen.getByText("ゲスト")).toBeInTheDocument();
+    expect(screen.getByText("ログインすると LLM が住民・ニュース・講評を生成します")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "ログイン" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "はじめる" }));
     await screen.findByText("あなたの財団に集まった 24 人");
     expect(screen.getByText(/同梱テンプレート/)).toBeInTheDocument();
@@ -28,7 +33,7 @@ describe("通しプレイ（LLM 不通）", () => {
       }
       fireEvent.click(screen.getByRole("button", { name: "この制度で 1 年を進める" }));
       await screen.findByText(`Year ${y} の結果`);
-      if (y === 1) expect(screen.getByText(/LLM に接続できなかったため b/)).toBeInTheDocument();
+      if (y === 1) expect(screen.getByText(/LLM を使えなかったため b/)).toBeInTheDocument();
       await waitFor(() => expect(screen.getAllByText(/同梱テンプレート/).length).toBeGreaterThan(0));
       fireEvent.click(screen.getByRole("button", { name: y < 5 ? `Year ${y + 1} の制度を決める` : "5 年後の社会を見る" }));
     }
@@ -48,6 +53,8 @@ describe("通しプレイ（LLM 不通）", () => {
     expect(["utopia", "monoculture", "cartel", "depletion"]).toContain(rec.ending.type);
     expect(rec.ending.review).toHaveLength(5);
     expect(rec.survey.rating).toBe(4);
+    // ゲストは /api/su-llm を一度も呼ばない
+    expect(fetchMock).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   }, 30000);
 });

@@ -16,7 +16,10 @@ function devApi(): Plugin {
           for await (const c of req) chunks.push(c as Buffer);
           const request = new Request("http://localhost/api/su-llm", {
             method: req.method,
-            headers: { "content-type": "application/json" },
+            headers: {
+              "content-type": "application/json",
+              ...(req.headers.authorization ? { authorization: req.headers.authorization } : {}),
+            },
             body: req.method === "POST" ? Buffer.concat(chunks) : undefined,
           });
           const handler = req.method === "OPTIONS" ? mod.OPTIONS : mod.POST;
