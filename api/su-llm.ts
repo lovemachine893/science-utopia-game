@@ -3,7 +3,7 @@
 // ログイン（Supabase Auth）したユーザーだけが使える。Bearer が無い・検証できないと 401、
 // 1 日の上限（既定 60 回）を超えると 429。どちらも LLM は呼ばない（api/_lib/suAuth.ts）。
 // 失敗時は 4xx/5xx を返し、画面側（src/lib/llm.ts）が同梱テンプレートに切り替える。
-import { gate, recordTokens } from "./_lib/suAuth";
+import { gate, recordTokens } from "./_lib/suAuth.js";
 
 export const config = { maxDuration: 60 };
 
